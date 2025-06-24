@@ -1,0 +1,612 @@
+module.exports = function (app) {
+    const userState = {};
+
+    async function askNotificationPreference(user, say) {
+        await say({
+            text: '🔔 When should we notify you during the campaign?',
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: '🔹 *Step 9: Notifications*\nWhen should we notify you during the campaign?\nChoose any that apply:'
+                    },
+                    accessory: {
+                        type: 'static_select',
+                        action_id: 'notify_selected',
+                        placeholder: {
+                            type: 'plain_text',
+                            text: 'Select one'
+                        },
+                        options: [
+                            { text: { type: 'plain_text', text: '🗓️ Meeting booked' }, value: 'meeting' },
+                            { text: { type: 'plain_text', text: '💬 Reply with interest' }, value: 'reply' },
+                            { text: { type: 'plain_text', text: '📞 Call request' }, value: 'call' },
+                            { text: { type: 'plain_text', text: '📌 Referral or partnership mention' }, value: 'referral' },
+                            { text: { type: 'plain_text', text: '🧾 Question/request for info' }, value: 'question' },
+                            { text: { type: 'plain_text', text: '📊 Add all replies to shared Google Sheet' }, value: 'sheet' },
+                            { text: { type: 'plain_text', text: '💤 Don’t notify me — just run it quietly' }, value: 'quiet' }
+                        ]
+                    }
+                }
+            ]
+        });
+    }
+
+
+    app.event('app_mention', async ({ event, say }) => {
+        const user = event.user;
+        userState[user] = { step: 'goals' };
+        await say(`👋 Hey <@${user}>! I’m Moha — your AI-powered growth assistant. Let’s build your outreach campaign step by step.`);
+        await say({
+            text: '📌 Step 1: What’s your outreach goal?',
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: '📌 *Step 1:* What’s your outreach goal?\nPlease choose one option below:' },
+                    accessory: {
+                        type: 'static_select',
+                        action_id: 'goal_selected',
+                        placeholder: { type: 'plain_text', text: 'Select an option' },
+                        options: [
+                            { text: { type: 'plain_text', text: '📅 Book more meetings' }, value: 'meetings' },
+                            { text: { type: 'plain_text', text: '📞 Get call requests' }, value: 'calls' },
+                            { text: { type: 'plain_text', text: '🔁 Start warm lead pipeline' }, value: 'leads' },
+                            { text: { type: 'plain_text', text: '🤝 Get referrals or partnerships' }, value: 'referrals' },
+                            { text: { type: 'plain_text', text: '✍️ Other' }, value: 'other' }
+                        ]
+                    }
+                }
+            ]
+        });
+    });
+
+    app.action('goal_selected', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        const selected = body.actions[0].selected_option.value;
+        userState[user] = { goals: selected, step: 'audience' };
+
+        await say('✅ Got it!\n\n📌 Step 2: Who is your target audience?\nExample: Tech founders, coaches, agency owners, etc.');
+    });
+
+    app.message(async ({ message, say }) => {
+        const user = message.user;
+        const text = message.text?.trim();
+        if (!userState[user]) return;
+
+        const step = userState[user].step;
+
+        if (step === 'audience') {
+            userState[user].audience = text;
+            userState[user].step = 'locations';
+            await say('✅ Noted.\n\n📌 Step 3: Where should we look for leads?\nReply with cities, states, or regions. You can separate them with commas.\nExample: California, New York, UK, Canada');
+        } else if (step === 'locations') {
+            userState[user].locations = text;
+            userState[user].step = 'offer';
+            await say('✅ Perfect.\n\n📌 Step 4: What are you offering?\nDescribe your product or service in 1-2 lines.');
+        } else if (step === 'offer') {
+            userState[user].offer = text;
+            userState[user].step = 'outreach_now';
+            await say({
+                text: '📌 Step 5: Are you currently doing outreach?',
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: '📌 *Step 5:* Are you currently using any tools to do outreach?'
+                        }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: 'Yes' },
+                                value: 'yes',
+                                action_id: 'outreach_yes'
+                            },
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: 'No' },
+                                value: 'no',
+                                action_id: 'outreach_no'
+                            }
+                        ]
+                    }
+                ]
+            });
+
+        } else if (step === 'other_tool') {
+            userState[user].other_tool = text;
+            userState[user].step = 'crm_integration_question';
+            await say({
+                text: 'Would you like us to integrate with your CRM?',
+
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: '*Would you like us to integrate with your CRM?*'
+                        }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: 'Yes, sync with my CRM' },
+                                value: 'sync',
+                                action_id: 'crm_yes'
+                            },
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: 'No, use Moha’s tools' },
+                                value: 'no_sync',
+                                action_id: 'crm_no'
+                            }
+                        ]
+                    }
+                ]
+            });
+        }
+        else if (step === 'signature_name') {
+            userState[user].signatureData.fullName =
+                text.toLowerCase() === 'default' ? userState[user].signatureData.fullName : text;
+            userState[user].step = 'signature_email';
+            await say(`📧 What’s your *email*? (default: *${userState[user].signatureData.email}*)\n\nReply with a new one or say "default" to keep this.`);
+        } else if (step === 'signature_email') {
+            userState[user].signatureData.email =
+                text.toLowerCase() === 'default' ? userState[user].signatureData.email : text;
+            userState[user].step = 'signature_company';
+            await say(`🏢 What’s your *company name*?`);
+        } else if (step === 'signature_company') {
+            userState[user].signatureData.company = text;
+            userState[user].step = 'signature_title';
+            await say(`💼 What’s your *title*?`);
+        } else if (step === 'signature_title') {
+            userState[user].signatureData.title = text;
+            userState[user].step = 'signature_website';
+            await say(`🌐 What’s your *website or booking link*?`);
+        } else if (step === 'signature_website') {
+            userState[user].signatureData.website = text;
+            userState[user].step = 'signature_phone';
+            await say(`📱 Your *phone number*? (optional, or type "skip")`);
+        } else if (step === 'signature_phone') {
+            if (text.toLowerCase() !== 'skip') {
+                userState[user].signatureData.phone = text;
+            }
+            userState[user].step = 'signature_linkedin';
+            await say(`🔗 Your *LinkedIn or social profile*? (optional, or type "skip")`);
+        } else if (step === 'signature_linkedin') {
+            if (text.toLowerCase() !== 'skip') {
+                userState[user].signatureData.social = text;
+            }
+            userState[user].step = 'signature_logo';
+            await say(`🖼️ Upload your *logo* image link (URL to image hosted online)\nExample: https://example.com/logo.png`);
+        } else if (step === 'signature_logo') {
+
+            const files = message.files;
+
+            if (files && files.length > 0 && files[0].mimetype.startsWith('image/')) {
+                userState[user].signatureData.logo = files[0].url_private;
+                userState[user].step = 'signature_preview';
+
+                const s = userState[user].signatureData;
+
+                let blocks = [
+                    { type: 'section', text: { type: 'mrkdwn', text: '*🖋️ Here’s your current signature preview:*' } },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `──────────────────────\n*${s.fullName}*\n${s.title}, ${s.company}\n${s.website} | ${s.phone || 'N/A'}\n${s.social || ''}\n──────────────────────`
+                        }
+                    },
+                    {
+                        type: 'image',
+                        image_url: s.logo,
+                        alt_text: 'Logo Preview'
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: '✅ Looks Good' },
+                                value: 'signature_ok',
+                                action_id: 'signature_ok'
+                            },
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: '✏️ Edit Signature' },
+                                value: 'signature_edit',
+                                action_id: 'signature_edit'
+                            }
+                        ]
+                    }
+                ];
+
+                await say({ blocks });
+            } else {
+                await say('⚠️ Please upload a valid image file (PNG, JPG, etc.) for your logo.');
+            }
+
+
+        }
+
+    });
+
+    app.action('outreach_yes', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].step = 'select_tool';
+        await say({
+            text: 'Select the tool you are currently using for outreach:',
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: 'Which tool are you currently using for outreach?' },
+                    accessory: {
+                        type: 'static_select',
+                        action_id: 'tool_selected',
+                        placeholder: { type: 'plain_text', text: 'Select one' },
+                        options: [
+                            { text: { type: 'plain_text', text: '📧 Gmail/Outlook (manual)' }, value: 'gmail' },
+                            { text: { type: 'plain_text', text: '⚡ Instantly / Smartlead' }, value: 'instantly' },
+                            { text: { type: 'plain_text', text: '🔗 HubSpot' }, value: 'hubspot' },
+                            { text: { type: 'plain_text', text: '📊 Salesforce' }, value: 'salesforce' },
+                            { text: { type: 'plain_text', text: '🎯 Salesloft' }, value: 'salesloft' },
+                            { text: { type: 'plain_text', text: '✍️ Other' }, value: 'other' }
+                        ]
+                    }
+                }
+            ]
+        });
+    });
+
+    app.action('outreach_no', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].outreach = 'no';
+        userState[user].step = 'complete';
+        await say(`✅ Thanks <@${user}>! That's helpful info. You're all set! 🙌`);
+    });
+
+    app.action('tool_selected', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        const tool = body.actions[0].selected_option.value;
+        userState[user].selected_tool = tool;
+
+        if (tool === 'hubspot' || tool === 'salesforce') {
+            userState[user].step = 'crm_integration_question';
+            await say({
+                text: 'Would you like us to integrate with your CRM?',
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: '*Would you like us to integrate with your CRM?*'
+                        }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: 'Yes, sync with my CRM' },
+                                value: 'sync',
+                                action_id: 'crm_yes'
+                            },
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: 'No, use Moha’s tools' },
+                                value: 'no_sync',
+                                action_id: 'crm_no'
+                            }
+                        ]
+                    }
+                ]
+            });
+        } else if (tool === 'other') {
+            userState[user].step = 'other_tool';
+            await say('Please tell us what other tool you are using.');
+        } else {
+            // userState[user].step = 'complete';
+            // await say(`✅ Got it. Thanks <@${user}>! You're all set for now. 🙌`);
+
+            userState[user].step = 'tone';
+            await say({
+                text: '🎨 Let’s align your outreach with your brand. What tone should we use?',
+                blocks: [
+                    {
+                        type: 'section',
+                        text: { type: 'mrkdwn', text: '*🎨 Step 6: Brand Voice*\nWhat tone should we use in your messages?' },
+                        accessory: {
+                            type: 'static_select',
+                            action_id: 'select_tone',
+                            placeholder: { type: 'plain_text', text: 'Select one' },
+                            options: [
+                                { text: { type: 'plain_text', text: '💬 Friendly' }, value: 'Friendly' },
+                                { text: { type: 'plain_text', text: '💼 Formal' }, value: 'Formal' },
+                                { text: { type: 'plain_text', text: '😎 Confident' }, value: 'Confident' },
+                                { text: { type: 'plain_text', text: '🧠 Curious' }, value: 'Curious' },
+                                { text: { type: 'plain_text', text: '✨ Witty' }, value: 'Witty' },
+                                { text: { type: 'plain_text', text: '🎯 Direct' }, value: 'Direct' },
+                                { text: { type: 'plain_text', text: '🎨 Playful' }, value: 'Playful' },
+                                { text: { type: 'plain_text', text: '🧊 Authoritative' }, value: 'Authoritative' },
+                                { text: { type: 'plain_text', text: '✍️ Other' }, value: 'Other' }
+                            ]
+                        }
+                    }
+                ]
+            });
+
+        }
+    });
+
+    app.action('crm_yes', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].crm_sync = true;
+        // userState[user].step = 'complete';
+        // await say(`🔗 We’ll sync Moha with your CRM. Thank you, <@${user}>! 🙌`);
+
+
+        userState[user].step = 'tone';
+        await say({
+            text: '🎨 Let’s align your outreach with your brand. What tone should we use?',
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: '*🎨 Step 6: Brand Voice*\nWhat tone should we use in your messages?' },
+                    accessory: {
+                        type: 'static_select',
+                        action_id: 'select_tone',
+                        placeholder: { type: 'plain_text', text: 'Select one' },
+                        options: [
+                            { text: { type: 'plain_text', text: '💬 Friendly' }, value: 'Friendly' },
+                            { text: { type: 'plain_text', text: '💼 Formal' }, value: 'Formal' },
+                            { text: { type: 'plain_text', text: '😎 Confident' }, value: 'Confident' },
+                            { text: { type: 'plain_text', text: '🧠 Curious' }, value: 'Curious' },
+                            { text: { type: 'plain_text', text: '✨ Witty' }, value: 'Witty' },
+                            { text: { type: 'plain_text', text: '🎯 Direct' }, value: 'Direct' },
+                            { text: { type: 'plain_text', text: '🎨 Playful' }, value: 'Playful' },
+                            { text: { type: 'plain_text', text: '🧊 Authoritative' }, value: 'Authoritative' },
+                            { text: { type: 'plain_text', text: '✍️ Other' }, value: 'Other' }
+                        ]
+                    }
+                }
+            ]
+        });
+
+    });
+
+    app.action('crm_no', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].crm_sync = false;
+        // userState[user].step = 'complete';
+        // await say(`✅ We’ll use Moha’s built-in tools for now. Thanks, <@${user}>! 🚀`);
+
+        userState[user].step = 'tone';
+        await say({
+            text: '🎨 Let’s align your outreach with your brand. What tone should we use?',
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: '*🎨 Step 6: Brand Voice*\nWhat tone should we use in your messages?' },
+                    accessory: {
+                        type: 'static_select',
+                        action_id: 'select_tone',
+                        placeholder: { type: 'plain_text', text: 'Select one' },
+                        options: [
+                            { text: { type: 'plain_text', text: '💬 Friendly' }, value: 'Friendly' },
+                            { text: { type: 'plain_text', text: '💼 Formal' }, value: 'Formal' },
+                            { text: { type: 'plain_text', text: '😎 Confident' }, value: 'Confident' },
+                            { text: { type: 'plain_text', text: '🧠 Curious' }, value: 'Curious' },
+                            { text: { type: 'plain_text', text: '✨ Witty' }, value: 'Witty' },
+                            { text: { type: 'plain_text', text: '🎯 Direct' }, value: 'Direct' },
+                            { text: { type: 'plain_text', text: '🎨 Playful' }, value: 'Playful' },
+                            { text: { type: 'plain_text', text: '🧊 Authoritative' }, value: 'Authoritative' },
+                            { text: { type: 'plain_text', text: '✍️ Other' }, value: 'Other' }
+                        ]
+                    }
+                }
+            ]
+        });
+    });
+
+
+    app.action('select_tone', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        const tone = body.actions[0].value;
+        userState[user].tone = tone;
+        userState[user].step = 'tone_preview';
+
+        await say({
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `📝 *Here’s a sample intro line based on your selected tone (${tone}):*\n\n"Hey <@${user}>! I know things get busy, so I’ll keep this short — here’s how we can help you book more appointments."`
+                    }
+                },
+                {
+                    type: 'actions',
+                    elements: [
+                        { type: 'button', text: { type: 'plain_text', text: '🔁 Change Tone' }, value: 'change_tone', action_id: 'change_tone' },
+                        { type: 'button', text: { type: 'plain_text', text: '✅ Looks Good' }, value: 'tone_ok', action_id: 'tone_ok' }
+                    ]
+                }
+            ]
+        });
+    });
+
+    app.action('tone_ok', async ({ ack, body, say, client }) => {
+        // await ack();
+        // const user = body.user.id;
+        // userState[user].step = 'signature';
+        // await say('✍️ Great! Now tell me what name and title you want at the bottom of your outreach messages.\n\nExample: `Muhammad Muzammil`');
+
+        await ack();
+        const user = body.user.id;
+        const profile = await client.users.profile.get({ user });
+        const realName = profile?.profile?.real_name || '';
+        const email = profile?.profile?.email || '';
+
+        userState[user].step = 'signature_name';
+        userState[user].signatureData = {
+            fullName: realName,
+            email: email
+        };
+
+        await say(`✍️ Last thing — let’s build your email signature.\n\nWhat's your *Full Name*? (default: *${realName}*)\n\nReply with a new name or say "default" to use this.`);
+
+
+    });
+
+    app.action('change_tone', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].step = 'tone';
+        await say('🔁 No worries! Please select a new tone:');
+        // Repeat tone button blocks or re-use same `say()` logic from above
+    });
+
+    app.action('signature_ok', async ({ ack, body, say }) => {
+        await ack();
+        // const user = body.user.id;
+        // userState[user].step = 'complete';
+        // await say(`🚀 Signature saved, <@${user}>! You're all set and ready to launch your outreach journey with Moha! 🙌`);
+
+        const user = body.user.id;
+        userState[user].step = 'review_sequence';
+
+        await say({
+            text: '🔍 Want to review the outreach messages before we send them?',
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: '🔹 *Step 8: Review Sequence*\nWant to review the outreach messages before we send them?'
+                    }
+                },
+                {
+                    type: 'actions',
+                    elements: [
+                        {
+                            type: 'button',
+                            text: { type: 'plain_text', text: '✅ Yes, send me the draft' },
+                            value: 'review_yes',
+                            action_id: 'review_yes'
+                        },
+                        {
+                            type: 'button',
+                            text: { type: 'plain_text', text: '🚀 No, just go live with my inputs' },
+                            value: 'review_no',
+                            action_id: 'review_no'
+                        }
+                    ]
+                }
+            ]
+        });
+
+    });
+
+    app.action('signature_edit', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].step = 'signature_name';
+        await say('✏️ Let’s edit your signature. What’s your *Full Name*?');
+    });
+
+
+    app.action('review_yes', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].review = true;
+        userState[user].step = 'notifications';
+
+        await askNotificationPreference(user, say);
+    });
+
+    app.action('review_no', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].review = false;
+        userState[user].step = 'notifications';
+
+        await askNotificationPreference(user, say);
+    });
+
+
+    app.action('notify_selected', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        const selected = body.actions[0].selected_option.value;
+
+        userState[user].notification = selected;
+        userState[user].step = 'launch_confirmation';
+    
+        const { audience, locations, offer } = userState[user];
+    
+        await say({
+            text: '🚀 Final Step: Launch Confirmation',
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `🔹 *Final Step: Launch Confirmation*\n\nYou’re all set!\nWe’re about to contact *${audience || 'your leads'}* in *${locations || 'target locations'}* with your offer:\n> “${offer || 'your value proposition'}”\n\nWe’ll message you here as replies come in. Want to book a kickoff call?`
+                    }
+                },
+                {
+                    type: 'actions',
+                    elements: [
+                        {
+                            type: 'button',
+                            text: { type: 'plain_text', text: '📞 Book Quick Call' },
+                            value: 'book_call',
+                            action_id: 'book_call'
+                        },
+                        {
+                            type: 'button',
+                            text: { type: 'plain_text', text: '🚀 Launch My Campaign' },
+                            value: 'launch_now',
+                            action_id: 'launch_now'
+                        }
+                    ]
+                }
+            ]
+        });
+    
+
+    });
+
+
+    app.action('book_call', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].step = 'complete';
+    
+        await say(`📅 Awesome! We’ll share a link to book a quick kickoff call with you, <@${user}>. Looking forward to it!`);
+    });
+    
+    app.action('launch_now', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        userState[user].step = 'complete';
+    
+        await say(`🚀 Boom! Your campaign is launching now. We’ll notify you here as results start rolling in. Let’s crush it, <@${user}>! 💥`);
+    });
+    
+
+};
