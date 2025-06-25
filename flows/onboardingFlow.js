@@ -42,8 +42,20 @@ module.exports = function (app) {
     }
 
 
-    async function askNotificationPreference(user, say) {
-        await say({
+    // Utility to get DM channel for a user
+    async function getDmChannel(client, userId) {
+        const im = await client.conversations.open({ users: userId });
+        return im.channel.id;
+    }
+
+    // Helper to send DM
+    async function sendDM(client, userId, message) {
+        const channel = await getDmChannel(client, userId);
+        await client.chat.postMessage({ channel, ...message });
+    }
+
+    async function askNotificationPreference(user, client) {
+        await sendDM(client, user, {
             text: '🔔 When should we notify you during the campaign?',
             blocks: [
                 {
@@ -75,6 +87,8 @@ module.exports = function (app) {
     }
 
     function generateIntroLine(tone, userId) {
+        console.log({tone});
+        
         const introLines = {
           Friendly: `Hey <@${userId}>! 😊 Hope you're having a great day! I’ll keep this short — here’s how we can help you book more appointments.`,
           Formal: `Hello <@${userId}>. I hope this message finds you well. I would like to briefly share how we can assist you in driving more appointments.`,
@@ -91,7 +105,7 @@ module.exports = function (app) {
       }
       
 
-    app.event('app_mention', async ({ event, say }) => {
+    app.event('team_join', async ({ event, say , client }) => {
         const user = event.user;
 
         if (!checkRateLimit(user)) {
@@ -100,10 +114,18 @@ module.exports = function (app) {
         }
         updateUserActivity(user);
         userState[user] = { step: 'goals' };
-        await say(`👋 Hey <@${user}>! I’m Moha — your AI-powered growth assistant. Let’s build your outreach campaign step by step.`);
-        await say({
+
+        // sendDM(client, user, { text: '👋 Hey! I’m Moha — your AI-powered growth assistant. Let’s build your outreach campaign step by step.' });
+
+
+        // await say(`👋 Hey <@${user}>! I’m Moha — your AI-powered growth assistant. Let’s build your outreach campaign step by step.`);
+        await sendDM(client, user,{
             text: '📌 Step 1: What’s your outreach goal?',
             blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: '👋 Hey! I’m Moha — your AI-powered growth assistant. Let’s build your outreach campaign step by step.' }
+                },
                 {
                     type: 'section',
                     text: { type: 'mrkdwn', text: '📌 *Step 1:* What’s your outreach goal?\nPlease choose one option below:' },
@@ -124,7 +146,7 @@ module.exports = function (app) {
         });
     });
 
-    app.action('goal_selected', async ({ ack, body, say }) => {
+    app.action('goal_selected', async ({ ack, body, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'goals' step
@@ -132,15 +154,15 @@ module.exports = function (app) {
         const selected = body.actions[0].selected_option.value;
         if (selected === 'other') {
             userState[user].step = 'goal_other_input';
-            await say('Please specify your outreach goal:');
+            await sendDM(client, user, { text: 'Please specify your outreach goal:' });
         } else {
             userState[user] = { goals: selected, step: 'audience' };
-            await say('✅ Got it!\n\n📌 Step 2: Who is your target audience?\nExample: Tech founders, coaches, agency owners, etc.');
+            await sendDM(client, user, { text: '✅ Got it!\n\n📌 Step 2: Who is your target audience?\nExample: Tech founders, coaches, agency owners, etc.' });
         }
     });
 
     // Handle custom goal input
-    app.message(async ({ message, say }) => {
+    app.message(async ({ message, client }) => {
         const user = message.user;
         const text = message.text?.trim();
 
@@ -155,20 +177,20 @@ module.exports = function (app) {
         if (step === 'goal_other_input') {
             userState[user].goals = text;
             userState[user].step = 'audience';
-            await say('✅ Got it!\n\n📌 Step 2: Who is your target audience?\nExample: Tech founders, coaches, agency owners, etc.');
+            await sendDM(client, user, { text: '✅ Got it!\n\n📌 Step 2: Who is your target audience?\nExample: Tech founders, coaches, agency owners, etc.' });
         }
         else if (step === 'audience') {
             userState[user].audience = text;
             userState[user].step = 'locations';
-            await say('✅ Noted.\n\n📌 Step 3: Where should we look for leads?\nReply with cities, states, or regions. You can separate them with commas.\nExample: California, New York, UK, Canada');
+            await sendDM(client, user, { text: '✅ Noted.\n\n📌 Step 3: Where should we look for leads?\nReply with cities, states, or regions. You can separate them with commas.\nExample: California, New York, UK, Canada' });
         } else if (step === 'locations') {
             userState[user].locations = text;
             userState[user].step = 'offer';
-            await say('✅ Perfect.\n\n📌 Step 4: What are you offering?\nDescribe your product or service in 1-2 lines.');
+            await sendDM(client, user, { text: '✅ Perfect.\n\n📌 Step 4: What are you offering?\nDescribe your product or service in 1-2 lines.' });
         } else if (step === 'offer') {
             userState[user].offer = text;
             userState[user].step = 'outreach_now';
-            await say({
+            await sendDM(client, user, {
                 text: '📌 Step 5: Are you currently doing outreach?',
                 blocks: [
                     {
@@ -203,13 +225,13 @@ module.exports = function (app) {
             userState[user].step = 'tone_preview';
             const introLine = generateIntroLine(text, user);
 
-            await say({
+            await sendDM(client, user, {
                 blocks: [
                     {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: `📝 *Here’s a sample intro line based on your selected  tone (${tone}):*\n\n"${introLine}"`
+                            text: `📝 *Here’s a sample intro line based on your selected  tone (${text}):*\n\n"${introLine}"`
                         }
                     },
                     {
@@ -226,7 +248,7 @@ module.exports = function (app) {
         else if (step === 'other_tool') {
             userState[user].other_tool = text;
             userState[user].step = 'crm_integration_question';
-            await say({
+            await sendDM(client, user, {
                 text: 'Would you like us to integrate with your CRM?',
 
                 blocks: [
@@ -261,7 +283,7 @@ module.exports = function (app) {
             userState[user].signatureData.fullName =
                 text.toLowerCase() === 'default' ? userState[user].signatureData.fullName : text;
             userState[user].step = 'signature_email';
-            await say({
+            await sendDM(client, user, {
                 text: `📧 What’s your *email*? `,
                 blocks: [
                     {
@@ -281,19 +303,19 @@ module.exports = function (app) {
             userState[user].signatureData.email =
                 text.toLowerCase() === 'default' ? userState[user].signatureData.email : text;
             userState[user].step = 'signature_company';
-            await say('🏢 What’s your *company name*?');
+            await sendDM(client, user, '🏢 What’s your *company name*?');
         } else if (step === 'signature_company') {
             userState[user].signatureData.company = text;
             userState[user].step = 'signature_title';
-            await say('💼 What’s your *title*?');
+            await sendDM(client, user, '💼 What’s your *title*?');
         } else if (step === 'signature_title') {
             userState[user].signatureData.title = text;
             userState[user].step = 'signature_website';
-            await say('🌐 What’s your *website or booking link*?');
+            await sendDM(client, user, '🌐 What’s your *website or booking link*?');
         } else if (step === 'signature_website') {
             userState[user].signatureData.website = text;
             userState[user].step = 'signature_phone';
-            await say({
+            await sendDM(client, user, {
                 text: '📱 Your *phone number*?',
                 blocks: [
                     {
@@ -311,7 +333,7 @@ module.exports = function (app) {
         } else if (step === 'signature_phone') {
             userState[user].signatureData.phone = text;
             userState[user].step = 'signature_linkedin';
-            await say({
+            await sendDM(client, user, {
                 text: '🔗 Your *LinkedIn or social profile*?',
                 blocks: [
                     {
@@ -329,7 +351,7 @@ module.exports = function (app) {
         } else if (step === 'signature_linkedin') {
             userState[user].signatureData.social = text;
             userState[user].step = 'signature_logo';
-            await say('🖼️ Upload your *logo*');
+            await sendDM(client, user, '🖼️ Upload your *logo*');
         } else if (step === 'signature_logo') {
 
             const files = message.files;
@@ -373,16 +395,16 @@ module.exports = function (app) {
                     }
                 ];
 
-                await say({ blocks });
+                await sendDM(client, user, { blocks });
             } else {
-                await say('⚠️ Please upload a valid image file (PNG, JPG, etc.) for your logo.');
+                await sendDM(client, user, '⚠️ Please upload a valid image file (PNG, JPG, etc.) for your logo.');
             }
 
 
         } else if (step === 'signature_name_other_input') {
             userState[user].signatureData.fullName = text;
             userState[user].step = 'signature_email';
-            await say({
+            await sendDM(client, user, {
                 text: `📧 What’s your *email*? (default: *${userState[user].signatureData.email}*)`,
                 blocks: [
                     {
@@ -401,18 +423,18 @@ module.exports = function (app) {
         } else if (step === 'signature_email_other_input') {
             userState[user].signatureData.email = text;
             userState[user].step = 'signature_company';
-            await say('🏢 What’s your *company name*?');
+            await sendDM(client, user, '🏢 What’s your *company name*?');
         }
 
     });
 
-    app.action('outreach_yes', async ({ ack, body, say }) => {
+    app.action('outreach_yes', async ({ ack, body, say ,client}) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'outreach_now' step
         if (!userState[user] || userState[user].step !== 'outreach_now') return;
         userState[user].step = 'select_tool';
-        await say({
+        await sendDM(client, user, {
             text: 'Select the tool you are currently using for outreach:',
             blocks: [
                 {
@@ -436,7 +458,7 @@ module.exports = function (app) {
         });
     });
 
-    app.action('outreach_no', async ({ ack, body, say }) => {
+    app.action('outreach_no', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'outreach_now' step
@@ -446,7 +468,7 @@ module.exports = function (app) {
         // await say(`✅ Thanks <@${user}>! That's helpful info. You're all set! 🙌`);
 
         userState[user].step = 'tone';
-        await say({
+        await sendDM(client, user, {
             text: '🎨 Let’s align your outreach with your brand. What tone should we use?',
             blocks: [
                 {
@@ -474,7 +496,7 @@ module.exports = function (app) {
 
     });
 
-    app.action('tool_selected', async ({ ack, body, say }) => {
+    app.action('tool_selected', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'select_tool' step
@@ -482,11 +504,11 @@ module.exports = function (app) {
         const tool = body.actions[0].selected_option.value;
         if (tool === 'other') {
             userState[user].step = 'other_tool';
-            await say('Please specify the outreach tool you are using:');
+            await sendDM(client, user, 'Please specify the outreach tool you are using:');
         } else if (tool === 'hubspot' || tool === 'salesforce') {
             userState[user].selected_tool = tool;
             userState[user].step = 'crm_integration_question';
-            await say({
+            await sendDM(client, user, {
                 text: 'Would you like us to integrate with your CRM?',
                 blocks: [
                     {
@@ -518,7 +540,7 @@ module.exports = function (app) {
         } else {
             userState[user].selected_tool = tool;
             userState[user].step = 'tone';
-            await say({
+            await sendDM(client, user, {
                 text: '🎨 Let’s align your outreach with your brand. What tone should we use?',
                 blocks: [
                     {
@@ -546,7 +568,7 @@ module.exports = function (app) {
         }
     });
 
-    app.action('crm_yes', async ({ ack, body, say }) => {
+    app.action('crm_yes', async ({ ack, body, say , client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'crm_integration_question' step
@@ -558,7 +580,7 @@ module.exports = function (app) {
 
 
         userState[user].step = 'tone';
-        await say({
+        await sendDM(client, user, {
             text: '🎨 Let’s align your outreach with your brand. What tone should we use?',
             blocks: [
                 {
@@ -586,7 +608,7 @@ module.exports = function (app) {
 
     });
 
-    app.action('crm_no', async ({ ack, body, say }) => {
+    app.action('crm_no', async ({ ack, body, say ,client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'crm_integration_question' step
@@ -597,7 +619,7 @@ module.exports = function (app) {
         // await say(`✅ We’ll use Moha’s built-in tools for now. Thanks, <@${user}>! 🚀`);
 
         userState[user].step = 'tone';
-        await say({
+        await sendDM(client, user, {
             text: '🎨 Let’s align your outreach with your brand. What tone should we use?',
             blocks: [
                 {
@@ -625,7 +647,7 @@ module.exports = function (app) {
     });
 
 
-    app.action('select_tone', async ({ ack, body, say }) => {
+    app.action('select_tone', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'tone' step
@@ -633,18 +655,19 @@ module.exports = function (app) {
         const tone = body.actions[0].selected_option.value;
         if (tone === 'Other') {
             userState[user].step = 'tone_other_input';
-            await say('Please specify the tone you want to use:');
+            await sendDM(client, user, 'Please specify the tone you want to use:');
         } else {
             userState[user].tone = tone;
             userState[user].step = 'tone_preview';
+            const introLine = generateIntroLine(tone, user);
 
-            await say({
+            await sendDM(client, user, {
                 blocks: [
                     {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: `📝 *Here’s a sample intro line based on your selected tone (${tone}):*\n\n"Hey <@${user}>! I know things get busy, so I’ll keep this short — here’s how we can help you book more appointments."`
+                            text: `📝 *Here’s a sample intro line based on your selected  tone (${tone}):*\n\n"${introLine}"`
                         }
                     },
                     {
@@ -679,7 +702,7 @@ module.exports = function (app) {
             email: email
         };
 
-        await say({
+        await sendDM(client, user, {
             text: `✍️ Last thing — let’s build your email signature.\n\nWhat's your *Full Name*?`,
             blocks: [
                 {
@@ -699,24 +722,24 @@ module.exports = function (app) {
 
     });
 
-    app.action('change_tone', async ({ ack, body, say }) => {
+    app.action('change_tone', async ({ ack, body, say , client}) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'tone_preview' step
         if (!userState[user] || userState[user].step !== 'tone_preview') return;
         userState[user].step = 'tone';
-        await say('🔁 No worries! Please select a new tone:');
+        await sendDM(client, user, '🔁 No worries! Please select a new tone:');
         // Repeat tone button blocks or re-use same `say()` logic from above
     });
 
-    app.action('signature_ok', async ({ ack, body, say }) => {
+    app.action('signature_ok', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'signature_preview' step
         if (!userState[user] || userState[user].step !== 'signature_preview') return;
         userState[user].step = 'review_sequence';
 
-        await say({
+        await sendDM(client, user, {
             text: '🔍 Want to review the outreach messages before we send them?',
             blocks: [
                 {
@@ -748,13 +771,13 @@ module.exports = function (app) {
 
     });
 
-    app.action('signature_edit', async ({ ack, body, say }) => {
+    app.action('signature_edit', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'signature_preview' step
         if (!userState[user] || userState[user].step !== 'signature_preview') return;
         userState[user].step = 'signature_name';
-        await say({
+        await sendDM(client, user, {
             text: `✏️ Let’s edit your signature. What’s your *Full Name*?`,
             blocks: [
                 {
@@ -773,17 +796,17 @@ module.exports = function (app) {
     });
 
     // Signature Name Buttons
-    app.action('signature_name_default', async ({ ack, body, say }) => {
+    app.action('signature_name_default', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         if (!userState[user] || userState[user].step !== 'signature_name') return;
         userState[user].step = 'signature_email';
-        await say({
+        await sendDM(client, user, {
             text: `📧 What’s your *email*? (default: *${userState[user].signatureData.email}*)`,
             blocks: [
                 {
                     type: 'section',
-                    text: { type: 'mrkdwn', text: `What's your *email*? (default: (default: *${userState[user].signatureData.email}*)` }
+                    text: { type: 'mrkdwn', text: `What's your *email*?` }
                 },
 
                 {
@@ -796,38 +819,38 @@ module.exports = function (app) {
             ]
         });
     });
-    app.action('signature_name_other', async ({ ack, body, say }) => {
+    app.action('signature_name_other', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         if (!userState[user] || userState[user].step !== 'signature_name') return;
         userState[user].step = 'signature_name_other_input';
-        await say('Please enter your full name:');
+        await sendDM(client, user, 'Please enter your full name:');
     });
 
     // Signature Email Buttons
-    app.action('signature_email_default', async ({ ack, body, say }) => {
+    app.action('signature_email_default', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         if (!userState[user] || userState[user].step !== 'signature_email') return;
         userState[user].step = 'signature_company';
-        await say('🏢 What’s your *company name*?');
+        await sendDM(client, user, '🏢 What’s your *company name*?');
     });
-    app.action('signature_email_other', async ({ ack, body, say }) => {
+    app.action('signature_email_other', async ({ ack, body, say , client}) => {
         await ack();
         const user = body.user.id;
         if (!userState[user] || userState[user].step !== 'signature_email') return;
         userState[user].step = 'signature_email_other_input';
-        await say('Please enter your email:');
+        await sendDM(client, user, 'Please enter your email:');
     });
 
 
     // Phone Skip Button
-    app.action('signature_phone_skip', async ({ ack, body, say }) => {
+    app.action('signature_phone_skip', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         if (!userState[user] || userState[user].step !== 'signature_phone') return;
         userState[user].step = 'signature_linkedin';
-        await say({
+        await sendDM(client, user, {
             text: '🔗 Your *LinkedIn or social profile*?',
             blocks: [
                 {
@@ -845,16 +868,16 @@ module.exports = function (app) {
     });
 
     // Social Skip Button
-    app.action('signature_social_skip', async ({ ack, body, say }) => {
+    app.action('signature_social_skip', async ({ ack, body, say , client}) => {
         await ack();
         const user = body.user.id;
         if (!userState[user] || userState[user].step !== 'signature_linkedin') return;
         userState[user].step = 'signature_logo';
-        await say('🖼️ Upload your *logo* ');
+        await sendDM(client, user, '🖼️ Upload your *logo* ');
     });
 
 
-    app.action('review_yes', async ({ ack, body, say }) => {
+    app.action('review_yes', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'review_sequence' step
@@ -862,10 +885,10 @@ module.exports = function (app) {
         userState[user].review = true;
         userState[user].step = 'notifications';
 
-        await askNotificationPreference(user, say);
+        await askNotificationPreference(user, client);
     });
 
-    app.action('review_no', async ({ ack, body, say }) => {
+    app.action('review_no', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'review_sequence' step
@@ -873,11 +896,11 @@ module.exports = function (app) {
         userState[user].review = false;
         userState[user].step = 'notifications';
 
-        await askNotificationPreference(user, say);
+        await askNotificationPreference(user, client);
     });
 
 
-    app.action('notify_selected', async ({ ack, body, say }) => {
+    app.action('notify_selected', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'notifications' step
@@ -889,7 +912,7 @@ module.exports = function (app) {
 
         const { audience, locations, offer } = userState[user];
 
-        await say({
+        await sendDM(client, user, {
             text: '🚀 Final Step: Launch Confirmation',
             blocks: [
                 {
@@ -923,24 +946,24 @@ module.exports = function (app) {
     });
 
 
-    app.action('book_call', async ({ ack, body, say }) => {
+    app.action('book_call', async ({ ack, body, say, client }) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'launch_confirmation' step
         if (!userState[user] || userState[user].step !== 'launch_confirmation') return;
         userState[user].step = 'complete';
 
-        await say(`📅 Awesome! We’ll share a link to book a quick kickoff call with you, <@${user}>. Looking forward to it!`);
+        await sendDM(client, user, `📅 Awesome! We’ll share a link to book a quick kickoff call with you, <@${user}>. Looking forward to it!`);
     });
 
-    app.action('launch_now', async ({ ack, body, say }) => {
+    app.action('launch_now', async ({ ack, body, say , client}) => {
         await ack();
         const user = body.user.id;
         // Only allow if user is on 'launch_confirmation' step
         if (!userState[user] || userState[user].step !== 'launch_confirmation') return;
         userState[user].step = 'complete';
 
-        await say(`🚀 Boom! Your campaign is launching now. We’ll notify you here as results start rolling in. Let’s crush it, <@${user}>! 💥`);
+        await sendDM(client, user, `🚀 Boom! Your campaign is launching now. We’ll notify you here as results start rolling in. Let’s crush it, <@${user}>! 💥`);
     });
 
 
