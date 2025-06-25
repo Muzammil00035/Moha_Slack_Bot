@@ -67,10 +67,16 @@ module.exports = function (app) {
         // Only allow if user is on 'goals' step
         if (!userState[user] || userState[user].step !== 'goals') return;
         const selected = body.actions[0].selected_option.value;
-        userState[user] = { goals: selected, step: 'audience' };
-        await say('✅ Got it!\n\n📌 Step 2: Who is your target audience?\nExample: Tech founders, coaches, agency owners, etc.');
+        if (selected === 'other') {
+            userState[user].step = 'goal_other_input';
+            await say('Please specify your outreach goal:');
+        } else {
+            userState[user] = { goals: selected, step: 'audience' };
+            await say('✅ Got it!\n\n📌 Step 2: Who is your target audience?\nExample: Tech founders, coaches, agency owners, etc.');
+        }
     });
 
+    // Handle custom goal input
     app.message(async ({ message, say }) => {
         const user = message.user;
         const text = message.text?.trim();
@@ -78,7 +84,12 @@ module.exports = function (app) {
 
         const step = userState[user].step;
 
-        if (step === 'audience') {
+        if (step === 'goal_other_input') {
+            userState[user].goals = text;
+            userState[user].step = 'audience';
+            await say('✅ Got it!\n\n📌 Step 2: Who is your target audience?\nExample: Tech founders, coaches, agency owners, etc.');
+        }
+        else if (step === 'audience') {
             userState[user].audience = text;
             userState[user].step = 'locations';
             await say('✅ Noted.\n\n📌 Step 3: Where should we look for leads?\nReply with cities, states, or regions. You can separate them with commas.\nExample: California, New York, UK, Canada');
@@ -119,7 +130,30 @@ module.exports = function (app) {
                 ]
             });
 
-        } else if (step === 'other_tool') {
+        } else if (step === 'tone_other_input') {
+            userState[user].tone = text;
+            userState[user].step = 'tone_preview';
+            await say({
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `📝 *Here’s a sample intro line based on your selected tone (${text}):*\n\n"Hey <@${user}>! I know things get busy, so I’ll keep this short — here’s how we can help you book more appointments."`
+                        }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            { type: 'button', text: { type: 'plain_text', text: '🔁 Change Tone' }, value: 'change_tone', action_id: 'change_tone' },
+                            { type: 'button', text: { type: 'plain_text', text: '✅ Looks Good' }, value: 'tone_ok', action_id: 'tone_ok' }
+                        ]
+                    }
+                ]
+            });
+        }
+        
+        else if (step === 'other_tool') {
             userState[user].other_tool = text;
             userState[user].step = 'crm_integration_question';
             await say({
@@ -271,6 +305,29 @@ module.exports = function (app) {
             }
 
 
+        } else if (step === 'signature_name_other_input') {
+            userState[user].signatureData.fullName = text;
+            userState[user].step = 'signature_email';
+            await say({
+                text: `📧 What’s your *email*? (default: *${userState[user].signatureData.email}*)`,
+                blocks: [
+                    {
+                        type: 'section',
+                        text: { type: 'mrkdwn', text: `What's your *email*? (default: *${userState[user].signatureData.email}*)` }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            { type: 'button', text: { type: 'plain_text', text: 'Default' }, value: 'default_email', action_id: 'signature_email_default' },
+                            { type: 'button', text: { type: 'plain_text', text: 'Other' }, value: 'other_email', action_id: 'signature_email_other' }
+                        ]
+                    }
+                ]
+            });
+        } else if (step === 'signature_email_other_input') {
+            userState[user].signatureData.email = text;
+            userState[user].step = 'signature_company';
+            await say('🏢 What’s your *company name*?');
         }
 
     });
@@ -321,9 +378,11 @@ module.exports = function (app) {
         // Only allow if user is on 'select_tool' step
         if (!userState[user] || userState[user].step !== 'select_tool') return;
         const tool = body.actions[0].selected_option.value;
-        userState[user].selected_tool = tool;
-
-        if (tool === 'hubspot' || tool === 'salesforce') {
+        if (tool === 'other') {
+            userState[user].step = 'other_tool';
+            await say('Please specify the outreach tool you are using:');
+        } else if (tool === 'hubspot' || tool === 'salesforce') {
+            userState[user].selected_tool = tool;
             userState[user].step = 'crm_integration_question';
             await say({
                 text: 'Would you like us to integrate with your CRM?',
@@ -354,13 +413,8 @@ module.exports = function (app) {
                     }
                 ]
             });
-        } else if (tool === 'other') {
-            userState[user].step = 'other_tool';
-            await say('Please tell us what other tool you are using.');
         } else {
-            // userState[user].step = 'complete';
-            // await say(`✅ Got it. Thanks <@${user}>! You're all set for now. 🙌`);
-
+            userState[user].selected_tool = tool;
             userState[user].step = 'tone';
             await say({
                 text: '🎨 Let’s align your outreach with your brand. What tone should we use?',
@@ -387,7 +441,6 @@ module.exports = function (app) {
                     }
                 ]
             });
-
         }
     });
 
@@ -476,27 +529,32 @@ module.exports = function (app) {
         // Only allow if user is on 'tone' step
         if (!userState[user] || userState[user].step !== 'tone') return;
         const tone = body.actions[0].selected_option.value;
-        userState[user].tone = tone;
-        userState[user].step = 'tone_preview';
+        if (tone === 'Other') {
+            userState[user].step = 'tone_other_input';
+            await say('Please specify the tone you want to use:');
+        } else {
+            userState[user].tone = tone;
+            userState[user].step = 'tone_preview';
 
-        await say({
-            blocks: [
-                {
-                    type: 'section',
-                    text: {
-                        type: 'mrkdwn',
-                        text: `📝 *Here’s a sample intro line based on your selected tone (${tone}):*\n\n"Hey <@${user}>! I know things get busy, so I’ll keep this short — here’s how we can help you book more appointments."`
+            await say({
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `📝 *Here’s a sample intro line based on your selected tone (${tone}):*\n\n"Hey <@${user}>! I know things get busy, so I’ll keep this short — here’s how we can help you book more appointments."`
+                        }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            { type: 'button', text: { type: 'plain_text', text: '🔁 Change Tone' }, value: 'change_tone', action_id: 'change_tone' },
+                            { type: 'button', text: { type: 'plain_text', text: '✅ Looks Good' }, value: 'tone_ok', action_id: 'tone_ok' }
+                        ]
                     }
-                },
-                {
-                    type: 'actions',
-                    elements: [
-                        { type: 'button', text: { type: 'plain_text', text: '🔁 Change Tone' }, value: 'change_tone', action_id: 'change_tone' },
-                        { type: 'button', text: { type: 'plain_text', text: '✅ Looks Good' }, value: 'tone_ok', action_id: 'tone_ok' }
-                    ]
-                }
-            ]
-        });
+                ]
+            });
+        }
     });
 
     app.action('tone_ok', async ({ ack, body, say, client }) => {
