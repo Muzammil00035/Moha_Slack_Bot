@@ -64,9 +64,10 @@ module.exports = function (app) {
     app.action('goal_selected', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'goals' step
+        if (!userState[user] || userState[user].step !== 'goals') return;
         const selected = body.actions[0].selected_option.value;
         userState[user] = { goals: selected, step: 'audience' };
-
         await say('✅ Got it!\n\n📌 Step 2: Who is your target audience?\nExample: Tech founders, coaches, agency owners, etc.');
     });
 
@@ -156,36 +157,71 @@ module.exports = function (app) {
             userState[user].signatureData.fullName =
                 text.toLowerCase() === 'default' ? userState[user].signatureData.fullName : text;
             userState[user].step = 'signature_email';
-            await say(`📧 What’s your *email*? (default: *${userState[user].signatureData.email}*)\n\nReply with a new one or say "default" to keep this.`);
+            await say({
+                text: `📧 What’s your *email*? (default: *${userState[user].signatureData.email}*)`,
+                blocks: [
+                    {
+                        type: 'actions',
+                        elements: [
+                            { type: 'button', text: { type: 'plain_text', text: 'Default' }, value: 'default_email', action_id: 'signature_email_default' },
+                            { type: 'button', text: { type: 'plain_text', text: 'Other' }, value: 'other_email', action_id: 'signature_email_other' }
+                        ]
+                    }
+                ]
+            });
         } else if (step === 'signature_email') {
             userState[user].signatureData.email =
                 text.toLowerCase() === 'default' ? userState[user].signatureData.email : text;
             userState[user].step = 'signature_company';
-            await say(`🏢 What’s your *company name*?`);
+            await say('🏢 What’s your *company name*?');
         } else if (step === 'signature_company') {
             userState[user].signatureData.company = text;
             userState[user].step = 'signature_title';
-            await say(`💼 What’s your *title*?`);
+            await say('💼 What’s your *title*?');
         } else if (step === 'signature_title') {
             userState[user].signatureData.title = text;
             userState[user].step = 'signature_website';
-            await say(`🌐 What’s your *website or booking link*?`);
+            await say('🌐 What’s your *website or booking link*?');
         } else if (step === 'signature_website') {
             userState[user].signatureData.website = text;
             userState[user].step = 'signature_phone';
-            await say(`📱 Your *phone number*? (optional, or type "skip")`);
+            await say({
+                text: '📱 Your *phone number*?',
+                blocks: [
+                    {
+                        type: 'section',
+                        text: { type: 'mrkdwn', text: `What's your *phone number*? (optional)` }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            { type: 'button', text: { type: 'plain_text', text: 'Skip' }, value: 'skip_phone', action_id: 'signature_phone_skip' }
+                        ]
+                    }
+                ]
+            });
         } else if (step === 'signature_phone') {
-            if (text.toLowerCase() !== 'skip') {
-                userState[user].signatureData.phone = text;
-            }
+            userState[user].signatureData.phone = text;
             userState[user].step = 'signature_linkedin';
-            await say(`🔗 Your *LinkedIn or social profile*? (optional, or type "skip")`);
+            await say({
+                text: '🔗 Your *LinkedIn or social profile*?',
+                blocks: [
+                    {
+                        type: 'section',
+                        text: { type: 'mrkdwn', text: `What's your *LinkedIn or social profile*? (optional)` }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            { type: 'button', text: { type: 'plain_text', text: 'Skip' }, value: 'skip_social', action_id: 'signature_social_skip' }
+                        ]
+                    }
+                ]
+            });
         } else if (step === 'signature_linkedin') {
-            if (text.toLowerCase() !== 'skip') {
-                userState[user].signatureData.social = text;
-            }
+            userState[user].signatureData.social = text;
             userState[user].step = 'signature_logo';
-            await say(`🖼️ Upload your *logo* image link (URL to image hosted online)\nExample: https://example.com/logo.png`);
+            await say('🖼️ Upload your *logo*');
         } else if (step === 'signature_logo') {
 
             const files = message.files;
@@ -242,6 +278,8 @@ module.exports = function (app) {
     app.action('outreach_yes', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'outreach_now' step
+        if (!userState[user] || userState[user].step !== 'outreach_now') return;
         userState[user].step = 'select_tool';
         await say({
             text: 'Select the tool you are currently using for outreach:',
@@ -270,6 +308,8 @@ module.exports = function (app) {
     app.action('outreach_no', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'outreach_now' step
+        if (!userState[user] || userState[user].step !== 'outreach_now') return;
         userState[user].outreach = 'no';
         userState[user].step = 'complete';
         await say(`✅ Thanks <@${user}>! That's helpful info. You're all set! 🙌`);
@@ -278,6 +318,8 @@ module.exports = function (app) {
     app.action('tool_selected', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'select_tool' step
+        if (!userState[user] || userState[user].step !== 'select_tool') return;
         const tool = body.actions[0].selected_option.value;
         userState[user].selected_tool = tool;
 
@@ -352,7 +394,10 @@ module.exports = function (app) {
     app.action('crm_yes', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'crm_integration_question' step
+        if (!userState[user] || userState[user].step !== 'crm_integration_question') return;
         userState[user].crm_sync = true;
+        userState[user].step = 'tone';
         // userState[user].step = 'complete';
         // await say(`🔗 We’ll sync Moha with your CRM. Thank you, <@${user}>! 🙌`);
 
@@ -389,7 +434,10 @@ module.exports = function (app) {
     app.action('crm_no', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'crm_integration_question' step
+        if (!userState[user] || userState[user].step !== 'crm_integration_question') return;
         userState[user].crm_sync = false;
+        userState[user].step = 'tone';
         // userState[user].step = 'complete';
         // await say(`✅ We’ll use Moha’s built-in tools for now. Thanks, <@${user}>! 🚀`);
 
@@ -425,7 +473,9 @@ module.exports = function (app) {
     app.action('select_tone', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
-        const tone = body.actions[0].value;
+        // Only allow if user is on 'tone' step
+        if (!userState[user] || userState[user].step !== 'tone') return;
+        const tone = body.actions[0].selected_option.value;
         userState[user].tone = tone;
         userState[user].step = 'tone_preview';
 
@@ -457,6 +507,8 @@ module.exports = function (app) {
 
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'tone_preview' step
+        if (!userState[user] || userState[user].step !== 'tone_preview') return;
         const profile = await client.users.profile.get({ user });
         const realName = profile?.profile?.real_name || '';
         const email = profile?.profile?.email || '';
@@ -467,7 +519,22 @@ module.exports = function (app) {
             email: email
         };
 
-        await say(`✍️ Last thing — let’s build your email signature.\n\nWhat's your *Full Name*? (default: *${realName}*)\n\nReply with a new name or say "default" to use this.`);
+        await say({
+            text: `✍️ Last thing — let’s build your email signature.\n\nWhat's your *Full Name*?`,
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `What's your *Full Name*? (default: *${realName}*)` }
+                },
+                {
+                    type: 'actions',
+                    elements: [
+                        { type: 'button', text: { type: 'plain_text', text: 'Default' }, value: 'default_name', action_id: 'signature_name_default' },
+                        { type: 'button', text: { type: 'plain_text', text: 'Other' }, value: 'other_name', action_id: 'signature_name_other' }
+                    ]
+                }
+            ]
+        });
 
 
     });
@@ -475,6 +542,8 @@ module.exports = function (app) {
     app.action('change_tone', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'tone_preview' step
+        if (!userState[user] || userState[user].step !== 'tone_preview') return;
         userState[user].step = 'tone';
         await say('🔁 No worries! Please select a new tone:');
         // Repeat tone button blocks or re-use same `say()` logic from above
@@ -482,11 +551,9 @@ module.exports = function (app) {
 
     app.action('signature_ok', async ({ ack, body, say }) => {
         await ack();
-        // const user = body.user.id;
-        // userState[user].step = 'complete';
-        // await say(`🚀 Signature saved, <@${user}>! You're all set and ready to launch your outreach journey with Moha! 🙌`);
-
         const user = body.user.id;
+        // Only allow if user is on 'signature_preview' step
+        if (!userState[user] || userState[user].step !== 'signature_preview') return;
         userState[user].step = 'review_sequence';
 
         await say({
@@ -524,14 +591,114 @@ module.exports = function (app) {
     app.action('signature_edit', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'signature_preview' step
+        if (!userState[user] || userState[user].step !== 'signature_preview') return;
         userState[user].step = 'signature_name';
-        await say('✏️ Let’s edit your signature. What’s your *Full Name*?');
+        await say({
+            text: `✏️ Let’s edit your signature. What’s your *Full Name*?`,
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `What's your *Full Name*? (default: *${userState[user].signatureData.fullName}*)` }
+                },
+                {
+                    type: 'actions',
+                    elements: [
+                        { type: 'button', text: { type: 'plain_text', text: 'Default' }, value: 'default_name', action_id: 'signature_name_default' },
+                        { type: 'button', text: { type: 'plain_text', text: 'Other' }, value: 'other_name', action_id: 'signature_name_other' }
+                    ]
+                }
+            ]
+        });
+    });
+
+    // Signature Name Buttons
+    app.action('signature_name_default', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        if (!userState[user] || userState[user].step !== 'signature_name') return;
+        userState[user].step = 'signature_email';
+        await say({
+            text: `📧 What’s your *email*? (default: *${userState[user].signatureData.email}*)`,
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `What's your *email*? (default: (default: *${userState[user].signatureData.email}*)` }
+                },
+
+                {
+                    type: 'actions',
+                    elements: [
+                        { type: 'button', text: { type: 'plain_text', text: 'Default' }, value: 'default_email', action_id: 'signature_email_default' },
+                        { type: 'button', text: { type: 'plain_text', text: 'Other' }, value: 'other_email', action_id: 'signature_email_other' }
+                    ]
+                }
+            ]
+        });
+    });
+    app.action('signature_name_other', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        if (!userState[user] || userState[user].step !== 'signature_name') return;
+        userState[user].step = 'signature_name_other_input';
+        await say('Please enter your full name:');
+    });
+
+    // Signature Email Buttons
+    app.action('signature_email_default', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        if (!userState[user] || userState[user].step !== 'signature_email') return;
+        userState[user].step = 'signature_company';
+        await say('🏢 What’s your *company name*?');
+    });
+    app.action('signature_email_other', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        if (!userState[user] || userState[user].step !== 'signature_email') return;
+        userState[user].step = 'signature_email_other_input';
+        await say('Please enter your email:');
+    });
+
+
+    // Phone Skip Button
+    app.action('signature_phone_skip', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        if (!userState[user] || userState[user].step !== 'signature_phone') return;
+        userState[user].step = 'signature_linkedin';
+        await say({
+            text: '🔗 Your *LinkedIn or social profile*?',
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `What's your *LinkedIn or social profile*? (optional)` }
+                },
+                {
+                    type: 'actions',
+                    elements: [
+                        { type: 'button', text: { type: 'plain_text', text: 'Skip' }, value: 'skip_social', action_id: 'signature_social_skip' }
+                    ]
+                }
+            ]
+        });
+    });
+
+    // Social Skip Button
+    app.action('signature_social_skip', async ({ ack, body, say }) => {
+        await ack();
+        const user = body.user.id;
+        if (!userState[user] || userState[user].step !== 'signature_linkedin') return;
+        userState[user].step = 'signature_logo';
+        await say('🖼️ Upload your *logo* ');
     });
 
 
     app.action('review_yes', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'review_sequence' step
+        if (!userState[user] || userState[user].step !== 'review_sequence') return;
         userState[user].review = true;
         userState[user].step = 'notifications';
 
@@ -541,6 +708,8 @@ module.exports = function (app) {
     app.action('review_no', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'review_sequence' step
+        if (!userState[user] || userState[user].step !== 'review_sequence') return;
         userState[user].review = false;
         userState[user].step = 'notifications';
 
@@ -551,13 +720,15 @@ module.exports = function (app) {
     app.action('notify_selected', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'notifications' step
+        if (!userState[user] || userState[user].step !== 'notifications') return;
         const selected = body.actions[0].selected_option.value;
 
         userState[user].notification = selected;
         userState[user].step = 'launch_confirmation';
-    
+
         const { audience, locations, offer } = userState[user];
-    
+
         await say({
             text: '🚀 Final Step: Launch Confirmation',
             blocks: [
@@ -587,7 +758,7 @@ module.exports = function (app) {
                 }
             ]
         });
-    
+
 
     });
 
@@ -595,18 +766,22 @@ module.exports = function (app) {
     app.action('book_call', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'launch_confirmation' step
+        if (!userState[user] || userState[user].step !== 'launch_confirmation') return;
         userState[user].step = 'complete';
-    
+
         await say(`📅 Awesome! We’ll share a link to book a quick kickoff call with you, <@${user}>. Looking forward to it!`);
     });
-    
+
     app.action('launch_now', async ({ ack, body, say }) => {
         await ack();
         const user = body.user.id;
+        // Only allow if user is on 'launch_confirmation' step
+        if (!userState[user] || userState[user].step !== 'launch_confirmation') return;
         userState[user].step = 'complete';
-    
+
         await say(`🚀 Boom! Your campaign is launching now. We’ll notify you here as results start rolling in. Let’s crush it, <@${user}>! 💥`);
     });
-    
+
 
 };
