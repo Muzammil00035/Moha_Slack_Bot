@@ -33,6 +33,22 @@ module.exports = function (app) {
         });
     }
 
+    function generateIntroLine(tone, userId) {
+        const introLines = {
+          Friendly: `Hey <@${userId}>! 😊 Hope you're having a great day! I’ll keep this short — here’s how we can help you book more appointments.`,
+          Formal: `Hello <@${userId}>. I hope this message finds you well. I would like to briefly share how we can assist you in driving more appointments.`,
+          Confident: `Hi <@${userId}>, I know we can bring real value to your outreach — here’s how we help you book more appointments, fast.`,
+          Curious: `Hey <@${userId}>, ever wonder how companies like yours boost meetings effortlessly? Let me share how we do it.`,
+          Witty: `Yo <@${userId}> — not here to waste time. Just a clever way to book more appointments with style 😉.`,
+          Direct: `Hi <@${userId}>, here’s exactly how we’ll help you book more appointments. Straightforward. No fluff.`,
+          Playful: `Hey <@${userId}>! 🎯 Let’s play the "Book More Appointments" game. We’ve got just the cheat code you need.`,
+          Authoritative: `<@${userId}>, our system has helped hundreds streamline appointment booking. You’re next.`,
+          Other: `Hey <@${userId}>! I know things get busy, so I’ll keep this short — here’s how we can help you book more appointments.`
+        };
+      
+        return introLines[tone] || introLines['Other'];
+      }
+      
 
     app.event('app_mention', async ({ event, say }) => {
         const user = event.user;
@@ -133,13 +149,15 @@ module.exports = function (app) {
         } else if (step === 'tone_other_input') {
             userState[user].tone = text;
             userState[user].step = 'tone_preview';
+            const introLine = generateIntroLine(text, user);
+
             await say({
                 blocks: [
                     {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: `📝 *Here’s a sample intro line based on your selected tone (${text}):*\n\n"Hey <@${user}>! I know things get busy, so I’ll keep this short — here’s how we can help you book more appointments."`
+                            text: `📝 *Here’s a sample intro line based on your selected  tone (${tone}):*\n\n"${introLine}"`
                         }
                     },
                     {
@@ -192,8 +210,12 @@ module.exports = function (app) {
                 text.toLowerCase() === 'default' ? userState[user].signatureData.fullName : text;
             userState[user].step = 'signature_email';
             await say({
-                text: `📧 What’s your *email*? (default: *${userState[user].signatureData.email}*)`,
+                text: `📧 What’s your *email*? `,
                 blocks: [
+                    {
+                        type: 'section',
+                        text: { type: 'mrkdwn', text: `What's your *email*?` }
+                    },
                     {
                         type: 'actions',
                         elements: [
@@ -272,7 +294,7 @@ module.exports = function (app) {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: `──────────────────────\n*${s.fullName}*\n${s.title}, ${s.company}\n${s.website} | ${s.phone || 'N/A'}\n${s.social || ''}\n──────────────────────`
+                            text: `──────────────────────\n*${s.fullName}*\n${s.title}, ${s.company}\n${s.website} | ${s.phone || ''}\n${s.social ? `<${s.social}|Linkedin>` : ''}\n──────────────────────`
                         }
                     },
                     {
@@ -610,7 +632,7 @@ module.exports = function (app) {
             blocks: [
                 {
                     type: 'section',
-                    text: { type: 'mrkdwn', text: `What's your *Full Name*? (default: *${realName}*)` }
+                    text: { type: 'mrkdwn', text: `What's your *Full Name*?` }
                 },
                 {
                     type: 'actions',
@@ -685,7 +707,7 @@ module.exports = function (app) {
             blocks: [
                 {
                     type: 'section',
-                    text: { type: 'mrkdwn', text: `What's your *Full Name*? (default: *${userState[user].signatureData.fullName}*)` }
+                    text: { type: 'mrkdwn', text: `What's your *Full Name*?` }
                 },
                 {
                     type: 'actions',
