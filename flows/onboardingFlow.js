@@ -368,8 +368,36 @@ module.exports = function (app) {
         // Only allow if user is on 'outreach_now' step
         if (!userState[user] || userState[user].step !== 'outreach_now') return;
         userState[user].outreach = 'no';
-        userState[user].step = 'complete';
-        await say(`✅ Thanks <@${user}>! That's helpful info. You're all set! 🙌`);
+        // userState[user].step = 'complete';
+        // await say(`✅ Thanks <@${user}>! That's helpful info. You're all set! 🙌`);
+
+        userState[user].step = 'tone';
+        await say({
+            text: '🎨 Let’s align your outreach with your brand. What tone should we use?',
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: '*🎨 Step 6: Brand Voice*\nWhat tone should we use in your messages?' },
+                    accessory: {
+                        type: 'static_select',
+                        action_id: 'select_tone',
+                        placeholder: { type: 'plain_text', text: 'Select one' },
+                        options: [
+                            { text: { type: 'plain_text', text: '💬 Friendly' }, value: 'Friendly' },
+                            { text: { type: 'plain_text', text: '💼 Formal' }, value: 'Formal' },
+                            { text: { type: 'plain_text', text: '😎 Confident' }, value: 'Confident' },
+                            { text: { type: 'plain_text', text: '🧠 Curious' }, value: 'Curious' },
+                            { text: { type: 'plain_text', text: '✨ Witty' }, value: 'Witty' },
+                            { text: { type: 'plain_text', text: '🎯 Direct' }, value: 'Direct' },
+                            { text: { type: 'plain_text', text: '🎨 Playful' }, value: 'Playful' },
+                            { text: { type: 'plain_text', text: '🧊 Authoritative' }, value: 'Authoritative' },
+                            { text: { type: 'plain_text', text: '✍️ Other' }, value: 'Other' }
+                        ]
+                    }
+                }
+            ]
+        });
+
     });
 
     app.action('tool_selected', async ({ ack, body, say }) => {
