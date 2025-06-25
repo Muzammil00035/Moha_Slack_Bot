@@ -106,7 +106,7 @@ module.exports = function (app) {
       
 
     app.event('team_join', async ({ event, say , client }) => {
-        const user = event.user;
+        const user = event?.user;
 
         if (!checkRateLimit(user)) {
             say(`👋 Hey <@${user}>! You have used excessively this bot kindly for a minute.`);
@@ -119,7 +119,7 @@ module.exports = function (app) {
 
 
         // await say(`👋 Hey <@${user}>! I’m Moha — your AI-powered growth assistant. Let’s build your outreach campaign step by step.`);
-        await sendDM(client, user,{
+        await sendDM(client, user?.id,{
             text: '📌 Step 1: What’s your outreach goal?',
             blocks: [
                 {
