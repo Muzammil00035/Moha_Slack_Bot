@@ -1,6 +1,47 @@
 module.exports = function (app) {
     const userState = {};
 
+
+    const CLEANUP_INTERVAL = 1 * 60 * 60 * 1000; // 24 hours
+    setInterval(() => {
+        const now = Date.now();
+        Object.keys(userState).forEach(userId => {
+            if (userState[userId].lastActivity && 
+                now - userState[userId].lastActivity > CLEANUP_INTERVAL) {
+                delete userState[userId];
+            }
+        });
+    }, CLEANUP_INTERVAL);
+
+    function updateUserActivity(userId) {
+        if (userState[userId]) {
+            userState[userId].lastActivity = Date.now();
+        }
+    }
+
+
+
+    const rateLimitMap = new Map();
+    const RATE_LIMIT_WINDOW = 60000; // 1 minute
+    const RATE_LIMIT_MAX_REQUESTS = 10;
+
+    function checkRateLimit(userId) {
+        const now = Date.now();
+        const userRequests = rateLimitMap.get(userId) || [];
+        
+        // Remove old requests outside the window
+        const recentRequests = userRequests.filter(timestamp => now - timestamp < RATE_LIMIT_WINDOW);
+        
+        if (recentRequests.length >= RATE_LIMIT_MAX_REQUESTS) {
+            return false; // Rate limited
+        }
+        
+        recentRequests.push(now);
+        rateLimitMap.set(userId, recentRequests);
+        return true;
+    }
+
+
     async function askNotificationPreference(user, say) {
         await say({
             text: '🔔 When should we notify you during the campaign?',
@@ -52,6 +93,12 @@ module.exports = function (app) {
 
     app.event('app_mention', async ({ event, say }) => {
         const user = event.user;
+
+        if (!checkRateLimit(user)) {
+            say(`👋 Hey <@${user}>! You have used excessively this bot kindly for a minute.`);
+            return;
+        }
+        updateUserActivity(user);
         userState[user] = { step: 'goals' };
         await say(`👋 Hey <@${user}>! I’m Moha — your AI-powered growth assistant. Let’s build your outreach campaign step by step.`);
         await say({
@@ -96,6 +143,11 @@ module.exports = function (app) {
     app.message(async ({ message, say }) => {
         const user = message.user;
         const text = message.text?.trim();
+
+        if (!checkRateLimit(user)) {
+            say(`👋 Hey <@${user}>! You have used excessively this bot kindly for a minute.`);
+            return;
+        }
         if (!userState[user]) return;
 
         const step = userState[user].step;
